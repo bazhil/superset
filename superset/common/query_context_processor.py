@@ -27,7 +27,7 @@ import pyarrow as pa
 from flask import current_app
 from flask_babel import gettext as _
 
-from superset.common.chart_data import ChartDataResultFormat
+from superset.common.chart_data import ChartDataResultFormat, ChartDataResultType
 from superset.common.chart_data_timing import (
     QueryAcquisitionResult,
     QueryAcquisitionTiming,
@@ -540,7 +540,7 @@ class QueryContextProcessor:
 
     def get_data(
         self, df: pd.DataFrame, coltypes: list[GenericDataType]
-    ) -> str | bytes | list[dict[str, Any]]:
+    ) -> str | bytes | list[dict[str, Any]] | pd.DataFrame:
         if self._query_context.result_format == ChartDataResultFormat.ARROW:
             return self._to_arrow_ipc(df)
 
@@ -551,7 +551,7 @@ class QueryContextProcessor:
             if verbose_map:
                 df.columns = [verbose_map.get(column, column) for column in columns]
 
-            result = None
+            result: str | bytes | pd.DataFrame | None = None
             if self._query_context.result_format == ChartDataResultFormat.CSV:
                 result = csv.df_to_escaped_csv(
                     df, index=include_index, **current_app.config["CSV_EXPORT"]
@@ -562,11 +562,24 @@ class QueryContextProcessor:
                     current_app.config["CSV_EXPORT"].get("encoding", "utf-8")
                 )
             elif self._query_context.result_format == ChartDataResultFormat.XLSX:
-                excel.apply_column_types(df, coltypes)
-                result = excel.df_to_excel(
-                    df, index=include_index, **current_app.config["EXCEL_EXPORT"]
+                form_data = self._query_context.form_data or {}
+                viz_type = (
+                    form_data.get("viz_type") if isinstance(form_data, dict) else None
                 )
-            return result or ""
+                # Pivot/table XLSX is pivoted in apply_client_processing. Writing
+                # Excel here and reading it back loses dtypes (dates, tz, integers).
+                if (
+                    self._query_context.result_type
+                    is ChartDataResultType.POST_PROCESSED
+                    and viz_type in {"table", "pivot_table_v2"}
+                ):
+                    result = df
+                else:
+                    excel.apply_column_types(df, coltypes)
+                    result = excel.df_to_excel(
+                        df, index=include_index, **current_app.config["EXCEL_EXPORT"]
+                    )
+            return result if result is not None else ""
 
         return df.to_dict(orient="records")
 

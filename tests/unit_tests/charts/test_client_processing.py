@@ -2334,6 +2334,32 @@ def test_apply_client_processing_xlsx_formats_percentages_as_cells():
     assert sheet.cell(row=2, column=2).number_format == "0.0%"
 
 
+def test_apply_client_processing_xlsx_accepts_in_memory_dataframe():
+    """POST_PROCESSED XLSX can skip the encode/decode round-trip."""
+    source = pd.DataFrame(
+        {"nation": ["US", "US"], "gender": ["boy", "girl"], "SUM(num)": [1, 99]}
+    )
+    result = {
+        "queries": [
+            {
+                "result_format": ChartDataResultFormat.XLSX,
+                "data": source,
+            }
+        ]
+    }
+    form_data = {
+        "viz_type": "pivot_table_v2",
+        "groupbyRows": ["nation"],
+        "groupbyColumns": ["gender"],
+        "metrics": ["SUM(num)"],
+    }
+    processed = apply_client_processing(result, form_data)
+    payload = processed["queries"][0]["data"]
+    assert isinstance(payload, (bytes, bytearray))
+    exported = pd.read_excel(BytesIO(payload), header=None)
+    assert exported.shape[0] >= 2
+
+
 def test_apply_client_processing_csv_format_show_values_as():
     """CSV exports carry the percentages the chart displays."""
     result = {

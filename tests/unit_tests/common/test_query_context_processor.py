@@ -180,6 +180,19 @@ def test_get_data_xlsx(
     mock_df_to_excel.assert_called_once_with(df, index=False)
 
 
+def test_get_data_xlsx_skips_encode_for_post_processed_table(
+    processor, mock_query_context
+):
+    """Avoid an Excel round-trip before apply_client_processing pivots/formats."""
+    df = pd.DataFrame({"col1": [1, 2], "col2": ["a", "b"]})
+    mock_query_context.result_format = ChartDataResultFormat.XLSX
+    mock_query_context.result_type = ChartDataResultType.POST_PROCESSED
+    mock_query_context.form_data = {"viz_type": "pivot_table_v2"}
+
+    result = processor.get_data(df, [GenericDataType.NUMERIC, GenericDataType.STRING])
+    assert result is df
+
+
 def test_get_data_json(processor, mock_query_context):
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": ["a", "b", "c"]})
     coltypes = [GenericDataType.NUMERIC, GenericDataType.STRING]

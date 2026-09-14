@@ -1321,45 +1321,50 @@ def apply_client_processing(  # noqa: C901
 
         csv_export_config = current_app.config.get("CSV_EXPORT", {})
 
-        if query["result_format"] == ChartDataResultFormat.CSV and isinstance(
-            data, bytes
-        ):
-            # QueryContextProcessor.get_data encodes CSV `data` to bytes using
-            # the configured CSV_EXPORT encoding (default utf-8), matching
-            # the encoding SQL Lab's own CSV export uses -- decode with that
-            # same encoding rather than assuming `data` is already a `str`.
-            # Decode before the empty-data check below so whitespace-only
-            # payloads (e.g. a columnless frame serialized as a bare
-            # newline) are caught rather than reaching `pd.read_csv` and
-            # raising `EmptyDataError`.
-            data = data.decode(csv_export_config.get("encoding", "utf-8"))
+        if isinstance(data, pd.DataFrame):
+            df = data
+            if df.empty and len(df.columns) == 0:
+                continue
+        else:
+            if query["result_format"] == ChartDataResultFormat.CSV and isinstance(
+                data, bytes
+            ):
+                # QueryContextProcessor.get_data encodes CSV `data` to bytes using
+                # the configured CSV_EXPORT encoding (default utf-8), matching
+                # the encoding SQL Lab's own CSV export uses -- decode with that
+                # same encoding rather than assuming `data` is already a `str`.
+                # Decode before the empty-data check below so whitespace-only
+                # payloads (e.g. a columnless frame serialized as a bare
+                # newline) are caught rather than reaching `pd.read_csv` and
+                # raising `EmptyDataError`.
+                data = data.decode(csv_export_config.get("encoding", "utf-8"))
 
-        if isinstance(data, str):
-            data = data.strip()
+            if isinstance(data, str):
+                data = data.strip()
 
-        if not data:
-            # do not try to process empty data
-            continue
+            if not data:
+                # do not try to process empty data
+                continue
 
-        sep = csv_export_config.get("sep", ",")
-        decimal = csv_export_config.get("decimal", ".")
+            sep = csv_export_config.get("sep", ",")
+            decimal = csv_export_config.get("decimal", ".")
 
-        if query["result_format"] == ChartDataResultFormat.JSON:
-            df = pd.DataFrame.from_dict(data)
-        elif query["result_format"] == ChartDataResultFormat.CSV:
-            # Use custom NA values configuration for
-            # reports to avoid unwanted conversions
-            # This allows users to control which values should be treated as null/NA
-            na_values = current_app.config["REPORTS_CSV_NA_NAMES"]
-            df = pd.read_csv(
-                StringIO(data),
-                keep_default_na=na_values is None,
-                na_values=na_values,
-                sep=sep,
-                decimal=decimal,
-            )
-        elif query["result_format"] == ChartDataResultFormat.XLSX:
-            df = _read_excel_for_client_processing(data, form_data)
+            if query["result_format"] == ChartDataResultFormat.JSON:
+                df = pd.DataFrame.from_dict(data)
+            elif query["result_format"] == ChartDataResultFormat.CSV:
+                # Use custom NA values configuration for
+                # reports to avoid unwanted conversions
+                # This allows users to control which values should be treated as null/NA
+                na_values = current_app.config["REPORTS_CSV_NA_NAMES"]
+                df = pd.read_csv(
+                    StringIO(data),
+                    keep_default_na=na_values is None,
+                    na_values=na_values,
+                    sep=sep,
+                    decimal=decimal,
+                )
+            elif query["result_format"] == ChartDataResultFormat.XLSX:
+                df = _read_excel_for_client_processing(data, form_data)
 
         # convert all columns to verbose (label) name
         if datasource:
