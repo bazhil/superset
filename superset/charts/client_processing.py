@@ -35,7 +35,13 @@ import pandas as pd
 from flask import current_app
 from flask_babel import gettext as __
 
-from superset.common.chart_data import ChartDataResultFormat
+from superset.charts.pivot_aggregators import (
+    first_along_axis,
+    last_along_axis,
+    list_unique_along_axis,
+    sample_std_along_axis,
+    sample_variance_along_axis,
+)
 from superset.common.grouping_sets import GROUPING_MARKER_SUFFIX
 from superset.constants import SHOW_VALUES_AS_PERCENT_MODES, ShowValuesAs
 from superset.extensions import event_logger
@@ -761,13 +767,6 @@ def pivot_df(  # pylint: disable=too-many-locals, too-many-arguments, too-many-s
     return df
 
 
-def list_unique_values(series: pd.Series) -> str:
-    """
-    List unique values in a series.
-    """
-    return ", ".join({str(v) for v in pd.Series.unique(series)})
-
-
 def union_currency_context(
     values: Union[pd.Series, pd.DataFrame], axis: int = 0
 ) -> Union[tuple[str, ...], pd.Series]:
@@ -806,18 +805,16 @@ PIVOT_AGGREGATIONS_WITHOUT_CURRENCY_CONTEXT = frozenset(
 pivot_v2_aggfunc_map = {
     "Count": pd.Series.count,
     "Count Unique Values": pd.Series.nunique,
-    "List Unique Values": list_unique_values,
+    "List Unique Values": list_unique_along_axis,
     "Sum": pd.Series.sum,
     "Average": pd.Series.mean,
     "Median": pd.Series.median,
-    "Sample Variance": lambda series: pd.series.var(series) if len(series) > 1 else 0,
-    "Sample Standard Deviation": (
-        lambda series: pd.series.std(series) if len(series) > 1 else 0,
-    ),
+    "Sample Variance": sample_variance_along_axis,
+    "Sample Standard Deviation": sample_std_along_axis,
     "Minimum": pd.Series.min,
     "Maximum": pd.Series.max,
-    "First": lambda series: series[:1],
-    "Last": lambda series: series[-1:],
+    "First": first_along_axis,
+    "Last": last_along_axis,
     "Sum as Fraction of Total": pd.Series.sum,
     "Sum as Fraction of Rows": pd.Series.sum,
     "Sum as Fraction of Columns": pd.Series.sum,
